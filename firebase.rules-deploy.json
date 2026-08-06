@@ -1,0 +1,6 @@
+﻿{
+  "firestore": {
+    "rules": "firestore.rules.partial.tmp",
+    "indexes": "firestore.indexes.json"
+  }
+}

@@ -1,0 +1,360 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../app/router/route_names.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../models/user_role.dart';
+import '../../../providers/user_provider.dart';
+import '../../../shared/widgets/role_fixed_header_page.dart';
+import '../models/interview_lab_models.dart';
+import '../providers/interview_lab_providers.dart';
+
+class InterviewLabStartScreen extends ConsumerStatefulWidget {
+  const InterviewLabStartScreen({super.key});
+
+  @override
+  ConsumerState<InterviewLabStartScreen> createState() =>
+      _InterviewLabStartScreenState();
+}
+
+class _InterviewLabStartScreenState
+    extends ConsumerState<InterviewLabStartScreen> {
+  InterviewLabTemplateModel? _selected;
+  String _difficulty = InterviewLabDifficulty.medium;
+  int _questionCount = 10;
+  bool _starting = false;
+  bool _syncedSelection = false;
+  String? _error;
+
+  UserRole _pageRole() {
+    final user = ref.read(currentUserProvider).value;
+    if (user?.primaryRoleEnum == UserRole.freelancer) return UserRole.freelancer;
+    return UserRole.student;
+  }
+
+  String _candidateRole() {
+    final user = ref.read(currentUserProvider).value;
+    if (user?.primaryRoleEnum == UserRole.freelancer) return 'freelancer';
+    return 'student';
+  }
+
+  void _syncFromTemplates(
+    List<InterviewLabTemplateModel> templates,
+    InterviewLabConfigModel config,
+  ) {
+    if (_syncedSelection) return;
+    _syncedSelection = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        if (templates.isNotEmpty) {
+          _selected = templates.first;
+          _difficulty = templates.first.defaultDifficulty;
+          _questionCount = templates.first.defaultQuestionCount
+              .clamp(1, config.maxQuestions);
+        } else {
+          _difficulty = config.defaultDifficulty;
+          _questionCount = config.maxQuestions.clamp(5, 15);
+        }
+      });
+    });
+  }
+
+  Future<void> _start() async {
+    final track = _selected?.roleTrack;
+    if (track == null || track.isEmpty) {
+      setState(() {
+        _error =
+            'No practice tracks available. Ask an admin to enable Interview Lab tracks.';
+      });
+      return;
+    }
+
+    setState(() {
+      _starting = true;
+      _error = null;
+    });
+    final notifier = ref.read(interviewLabActionProvider.notifier);
+    final session = await notifier.createSession(
+      roleTrack: track,
+      candidateRole: _candidateRole(),
+      difficulty: _difficulty,
+      templateId: _selected?.templateId,
+      questionCountOverride: _questionCount,
+    );
+    if (!mounted) return;
+    if (session == null) {
+      final conflictId = notifier.activeSessionConflictId;
+      setState(() {
+        _starting = false;
+        _error = notifier.lastErrorMessage ??
+            'Unable to start interview. Check AI Gateway and try again.';
+      });
+      if (conflictId != null) {
+        final resume = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Resume existing session?'),
+            content: const Text(
+              'You already have an interview in progress. Resume it instead of starting a new one?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Resume'),
+              ),
+            ],
+          ),
+        );
+        if (resume == true && mounted) {
+          context.pushReplacementNamed(
+            RouteNames.interviewLabSession,
+            pathParameters: {'sessionId': conflictId},
+          );
+        }
+      }
+      return;
+    }
+
+    final began = await notifier.beginAnswering(session.sessionId);
+    if (!mounted) return;
+    setState(() => _starting = false);
+    if (!began) {
+      setState(() {
+        _error = notifier.lastErrorMessage ?? 'Could not begin session.';
+      });
+      return;
+    }
+    context.pushReplacementNamed(
+      RouteNames.interviewLabSession,
+      pathParameters: {'sessionId': session.sessionId},
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final templatesAsync = ref.watch(interviewLabTemplatesProvider);
+    final configAsync = ref.watch(interviewLabConfigProvider);
+    final config = configAsync.value ?? InterviewLabConfigModel.defaults;
+    final labEnabled = config.enabled;
+    final maxQ = config.maxQuestions.clamp(5, 50);
+
+    return RoleFixedHeaderPage(
+      role: _pageRole(),
+      title: 'Start practice interview',
+      subtitle: labEnabled
+          ? 'Tracks are managed by admin. Questions are generated by AI.'
+          : 'Interview Lab is temporarily disabled by admin.',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        child: templatesAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Could not load tracks: $e')),
+          data: (templates) {
+            _syncFromTemplates(templates, config);
+            final counts = <int>[
+              for (final n in [5, 10, 15])
+                if (n <= maxQ) n,
+            ];
+            if (counts.isEmpty) counts.add(maxQ);
+            final selectedCount = counts.contains(_questionCount)
+                ? _questionCount
+                : counts.last;
+            if (selectedCount != _questionCount) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                setState(() => _questionCount = selectedCount);
+              });
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!labEnabled) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'AI Interview Lab is disabled. Contact your admin.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                Text(
+                  'Practice track',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                if (templates.isEmpty)
+                  Text(
+                    'No active tracks yet. An admin must seed or create tracks '
+                    'in Interview Lab settings.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final t in templates)
+                        ChoiceChip(
+                          label: Text(t.displayTitle),
+                          selected: _selected?.templateId == t.templateId,
+                          onSelected: _starting || !labEnabled
+                              ? null
+                              : (_) => setState(() {
+                                    _selected = t;
+                                    _difficulty = t.defaultDifficulty;
+                                    _questionCount = t.defaultQuestionCount
+                                        .clamp(1, maxQ);
+                                  }),
+                        ),
+                    ],
+                  ),
+                if (_selected != null &&
+                    (_selected!.description.isNotEmpty ||
+                        _selected!.focusTopics.isNotEmpty)) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    [
+                      if (_selected!.description.isNotEmpty)
+                        _selected!.description,
+                      if (_selected!.focusTopics.isNotEmpty)
+                        'Focus: ${_selected!.focusTopics.join(', ')}',
+                    ].join('\n'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Text(
+                  'Difficulty',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: InterviewLabDifficulty.easy,
+                      label: Text('Easy'),
+                    ),
+                    ButtonSegment(
+                      value: InterviewLabDifficulty.medium,
+                      label: Text('Medium'),
+                    ),
+                    ButtonSegment(
+                      value: InterviewLabDifficulty.hard,
+                      label: Text('Hard'),
+                    ),
+                  ],
+                  selected: {_difficulty},
+                  onSelectionChanged: _starting || !labEnabled
+                      ? null
+                      : (v) => setState(() => _difficulty = v.first),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Interview length',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SegmentedButton<int>(
+                  segments: [
+                    for (final n in counts)
+                      ButtonSegment(value: n, label: Text('$n Q')),
+                  ],
+                  selected: {selectedCount},
+                  onSelectionChanged: _starting || !labEnabled
+                      ? null
+                      : (v) => setState(() => _questionCount = v.first),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.timer_outlined, color: AppColors.primary),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Estimated time · about ${(selectedCount * 2.5).round().clamp(8, 60)} minutes'
+                          '${config.timerEnforced ? ' (timer enforced)' : ''}',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ),
+                ],
+                if (_starting) ...[
+                  const SizedBox(height: 20),
+                  const LinearProgressIndicator(),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Generating AI questions… Please wait.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: _starting || !labEnabled || templates.isEmpty
+                      ? null
+                      : _start,
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: Text(_starting ? 'Preparing…' : 'Start Interview'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SkillForge Portfolio</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: #0f172a;
+      color: white;
+    }
+    .state {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 40px;
+      text-align: center;
+    }
+    .state-card {
+      max-width: 680px;
+      padding: 34px;
+      border-radius: 28px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.14);
+      box-shadow: 0 24px 80px rgba(0,0,0,.28);
+    }
+    code {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.12);
+      color: #bfdbfe;
+    }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 90px 24px;
+      background:
+        radial-gradient(circle at top left, rgba(79,70,229,.85), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(6,182,212,.65), transparent 34%),
+        #0f172a;
+    }
+    .hero-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      display: flex;
+      gap: 30px;
+      align-items: center;
+    }
+    .avatar {
+      width: 128px;
+      height: 128px;
+      border-radius: 34px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.20);
+      font-size: 54px;
+      font-weight: 900;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: #93c5fd;
+      font-size: 13px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(40px, 7vw, 76px);
+      line-height: .95;
+    }
+    .headline {
+      max-width: 760px;
+      color: #dbeafe;
+      font-size: 21px;
+      line-height: 1.55;
+      margin: 16px 0 0;
+    }
+    .meta {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      padding: 9px 13px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.15);
+      color: #e0f2fe;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .actions {
+      margin-top: 26px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      padding: 13px 18px;
+      border-radius: 15px;
+      font-weight: 800;
+      text-decoration: none;
+    }
+    .primary { background: white; color: #0f172a; }
+    .secondary { color: white; border: 1px solid rgba(255,255,255,.25); }
+    .section {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 38px 24px;
+    }
+    .section h2 {
+      margin: 0 0 18px;
+      font-size: 30px;
+    }
+    .about {
+      color: #cbd5e1;
+      font-size: 18px;
+      line-height: 1.8;
+      max-width: 900px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+      gap: 16px;
+    }
+    .skill-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 11px;
+    }
+    .card {
+      padding: 22px;
+      border-radius: 24px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 20px 60px rgba(0,0,0,.16);
+    }
+    .card h3 { margin: 0 0 10px; }
+    .card p { color: #cbd5e1; line-height: 1.6; }
+    .footer {
+      padding: 38px 24px;
+      text-align: center;
+      color: #94a3b8;
+    }
+    @media (max-width: 720px) {
+      .hero-inner { flex-direction: column; align-items: flex-start; }
+      .avatar { width: 104px; height: 104px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <main class="state">
+      <div class="state-card">
+        <h1>SkillForge Portfolio</h1>
+        <p>Loading public profile...</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+
+  <script>
+    console.log("EMERGENCY_SINGLE_FILE_V1 loaded");
+
+    const firebaseConfig = {
+      apiKey: "PASTE_YOUR_API_KEY",
+      authDomain: "skillforge-ai-4f2da.firebaseapp.com",
+      projectId: "skillforge-ai-4f2da",
+      storageBucket: "skillforge-ai-4f2da.appspot.com",
+      messagingSenderId: "PASTE_YOUR_SENDER_ID",
+      appId: "PASTE_YOUR_APP_ID"
+    };
+
+    const root = document.getElementById("app");
+
+    function html(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function render(content) {
+      root.innerHTML = content;
+    }
+
+    function getSlug() {
+      const params = new URLSearchParams(location.search);
+      const querySlug = params.get("slug");
+      if (querySlug && querySlug.trim()) return querySlug.trim();
+
+      const parts = location.pathname.split("/").filter(Boolean);
+      if (parts[0] === "p" && parts[1]) return decodeURIComponent(parts[1]);
+      if (parts[0] && parts[0] !== "p") return decodeURIComponent(parts[0]);
+
+      return "";
+    }
+
+    function list(value) {
+      if (!value) return [];
+      if (Array.isArray(value)) {
+        return value.map((item) => {
+          if (typeof item === "string") return item;
+          return item.name || item.title || item.skillName || "";
+        }).filter(Boolean);
+      }
+      if (typeof value === "string") {
+        return value.split(",").map(x => x.trim()).filter(Boolean);
+      }
+      return [];
+    }
+
+    function cards(value) {
+      if (!Array.isArray(value)) return [];
+      return value.map((item) => {
+        if (typeof item === "string") return { title: item, description: "" };
+        return {
+          title: item.title || item.name || item.serviceTitle || item.courseTitle || "Untitled",
+          description: item.description || item.summary || item.bio || "",
+          link: item.link || item.url || ""
+        };
+      });
+    }
+
+    function renderSkills(title, items) {
+      if (!items.length) return "";
+      return `
+        <section class="section">
+          <h2>${html(title)}</h2>
+          <div class="skill-grid">
+            ${items.map(item => `<span class="pill">${html(item)}</span>`).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderCards(title, items) {
+      if (!items.length) return "";
+      return `
+        <section class="section">
+          <h2>${html(title)}</h2>
+          <div class="grid">
+            ${items.map(item => `
+              <article class="card">
+                <h3>${html(item.title)}</h3>
+                ${item.description ? `<p>${html(item.description)}</p>` : ""}
+                ${item.link ? `<a class="pill" href="${html(item.link)}" target="_blank" rel="noopener">Open</a>` : ""}
+              </article>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderState(title, message, code = "") {
+      render(`
+        <main class="state">
+          <div class="state-card">
+            <h1>${html(title)}</h1>
+            <p>${html(message)}</p>
+            ${code ? `<code>${html(code)}</code>` : ""}
+          </div>
+        </main>
+      `);
+    }
+
+    function renderProfile(data, slug) {
+      const displayName = data.displayName || data.name || "SkillForge Creator";
+      const headline = data.headline || data.title || "Verified SkillForge Portfolio";
+      const bio = data.bio || data.about || "This creator has published a public SkillForge portfolio.";
+      const role = data.roleType || data.role || "Portfolio";
+      const avatar = data.avatarUrl || data.photoUrl || "";
+      const locationText = data.location || "";
+
+      const verifiedSkills = list(data.verifiedSkills);
+      const skills = list(data.skills);
+      const projects = cards(data.projects);
+      const services = cards(data.services);
+      const courses = cards(data.coursesCreated || data.courses);
+      const certificates = cards(data.certificates);
+
+      render(`
+        <main>
+          <section class="hero">
+            <div class="hero-inner">
+              <div class="avatar">
+                ${avatar ? `<img src="${html(avatar)}" alt="${html(displayName)}">` : `<span>${html(displayName[0] || "S")}</span>`}
+              </div>
+              <div>
+                <p class="eyebrow">SkillForge AI Public Portfolio</p>
+                <h1>${html(displayName)}</h1>
+                <p class="headline">${html(headline)}</p>
+                <div class="meta">
+                  <span class="pill">${html(role)}</span>
+                  ${locationText ? `<span class="pill">${html(locationText)}</span>` : ""}
+                  <span class="pill">/p/${html(slug)}</span>
+                </div>
+                <div class="actions">
+                  <a class="btn primary" href="#work">View Work</a>
+                  <a class="btn secondary" href="#contact">Contact / Hire</a>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <h2>About</h2>
+            <p class="about">${html(bio)}</p>
+          </section>
+
+          ${renderSkills("Verified Skills", verifiedSkills.length ? verifiedSkills : skills)}
+          ${verifiedSkills.length ? renderSkills("Skills", skills.filter(s => !verifiedSkills.includes(s))) : ""}
+
+          <div id="work"></div>
+          ${renderCards("Projects", projects)}
+          ${renderCards("Services", services)}
+          ${renderCards("Courses", courses)}
+          ${renderCards("Certificates", certificates)}
+
+          <section id="contact" class="section">
+            <div class="card">
+              <h2>Contact / Hire</h2>
+              <p>This public portfolio is powered by SkillForge AI. Connect safely through the SkillForge platform.</p>
+            </div>
+          </section>
+
+          <footer class="footer">Powered by SkillForge AI</footer>
+        </main>
+      `);
+    }
+
+    async function main() {
+      const slug = getSlug();
+      console.log("Resolved slug:", slug);
+
+      if (!slug) {
+        renderState("Portfolio slug is missing", "Open a link like /p/your-slug.");
+        return;
+      }
+
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+
+      const path = "publicProfiles/" + slug;
+      console.log("Reading:", path);
+
+      const doc = await db.collection("publicProfiles").doc(slug).get();
+      console.log("Doc exists:", doc.exists);
+
+      if (!doc.exists) {
+        renderState("Portfolio not found", "No public profile exists for this slug.", path);
+        return;
+      }
+
+      const data = doc.data() || {};
+      console.log("Profile data:", data);
+
+      const visible = data.publicVisible === true || data.isPublic === true;
+      console.log("Visible:", visible, data.publicVisible, data.isPublic);
+
+      if (!visible) {
+        renderState("This portfolio is private", "The owner has not published this portfolio yet.");
+        return;
+      }
+
+      renderProfile(data, slug);
+    }
+
+    main().catch((error) => {
+      console.error("Portfolio load failed:", error);
+      renderState("Portfolio failed to load", error.message || String(error));
+    });
+  </script>
+</body>
+</html>

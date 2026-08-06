@@ -1,0 +1,14 @@
+# Local AI gateway backend
+
+# Secrets
+.env
+*.env
+.env.local
+.env.production
+.env.development
+
+# Node
+node_modules/
+npm-debug.log*
+*firebase-adminsdk*.json
+serviceAccount.json
